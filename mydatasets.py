@@ -108,3 +108,72 @@ class MR(TarDataset):
 
         return (cls(text_field, label_field, examples=examples[:dev_index]),
                 cls(text_field, label_field, examples=examples[dev_index:]))
+
+
+
+
+import re
+import spacy
+NLP = spacy.load('en')
+# MAX_CHARS = 20000
+def clean_str(string):
+    """
+    Tokenization/string cleaning for all datasets except for SST.
+    Original taken from https://github.com/yoonkim/CNN_sentence/blob/master/process_data.py
+    """
+    string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
+    string = re.sub(r"\'s", " \'s", string)
+    string = re.sub(r"\'ve", " \'ve", string)
+    string = re.sub(r"n\'t", " n\'t", string)
+    string = re.sub(r"\'re", " \'re", string)
+    string = re.sub(r"\'d", " \'d", string)
+    string = re.sub(r"\'ll", " \'ll", string)
+    string = re.sub(r",", " , ", string)
+    string = re.sub(r"!", " ! ", string)
+    string = re.sub(r"\(", " \( ", string)
+    string = re.sub(r"\)", " \) ", string)
+    string = re.sub(r"\?", " \? ", string)
+    string = re.sub(r"\s{2,}", " ", string)
+    return string.strip()
+
+def tokenizer(comment):
+    comment = re.sub(
+        r"[\*\"“”\n\\…\+\-\/\=\(\)‘•:\[\]\|’\!;]", " ",
+        str(comment))
+    comment = re.sub(r"[ ]+", " ", comment)
+    comment = re.sub(r"\!+", "!", comment)
+    comment = re.sub(r"\,+", ",", comment)
+    comment = re.sub(r"\?+", "?", comment)
+    comment = clean_str(comment)
+    # if (len(comment) > MAX_CHARS):
+    #     comment = comment[:MAX_CHARS]
+    return [
+        x.text for x in NLP.tokenizer(comment) if x.text != " "]
+
+
+import logging
+import torch
+
+LOGGER = logging.getLogger("toxic_dataset")
+
+
+def get_dataset(data_path, use_cuda):
+    TEXT = data.Field(tokenize=tokenizer, lower=True,
+                      tensor_type=torch.cuda.LongTensor if use_cuda else torch.LongTensor
+                      )
+    LABELS = data.Field(sequential=False, tensor_type=torch.LongTensor if use_cuda else torch.LongTensor)
+    LOGGER.debug("Begin data loading Process")
+    train, val, test = data.TabularDataset.splits(
+        path=data_path, train='_train.tsv',
+        validation='_dev.tsv', test='_test.tsv', format='tsv',
+        fields=[('text', TEXT), ('labels', LABELS)])
+
+    train_iter, val_iter, test_iter = data.BucketIterator.splits(
+        (train, val, test), batch_sizes=(16, 256, 256),
+        sort_key=lambda x: len(x.text), device=0)
+
+    TEXT.build_vocab(train, min_freq=20)
+    LABELS.build_vocab(train)
+    LOGGER.debug("Finish Data Loading")
+
+    return train_iter, val_iter, test_iter, TEXT, LABELS

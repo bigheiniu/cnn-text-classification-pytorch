@@ -73,6 +73,7 @@ label_field = data.Field(sequential=False)
 train_iter, dev_iter = mr(text_field, label_field, device=-1, repeat=False)
 # train_iter, dev_iter, test_iter = sst(text_field, label_field, device=-1, repeat=False)
 
+train_iter, dev_iter, test_iter, text_field, label_field = mydatasets.get_dataset(data_path="", use_cuda=False)
 
 # update args and print
 args.embed_num = len(text_field.vocab)
